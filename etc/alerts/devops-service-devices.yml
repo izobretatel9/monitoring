@@ -1,0 +1,11 @@
+groups:
+- name: device icmp fail
+  rules:
+  - alert: ICMPFail
+    expr: probe_success{host_type="device",icmp="ipv4"} == 0
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      description: "{{ $labels.instance }} isn't available by icmp ping for more than 1 minute"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} isn't available by icmp ping"

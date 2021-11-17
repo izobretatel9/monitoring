@@ -1,0 +1,11 @@
+groups:
+- name: bbw service down
+  rules:
+  - alert: BbwServiceDown
+    expr: windows_service_state{instance=~"bbw.*",name="bamboo-remote-agent",state="running"} == 0
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "{{ $labels.instance }} - {{ $labels.name }} is not active for 2 minutes"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.name }} is not active"

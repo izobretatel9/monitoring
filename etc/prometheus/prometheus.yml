@@ -1,0 +1,105 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 14s
+
+scrape_configs:
+
+  - job_name: 'vmagents'
+    static_configs:
+      - targets:
+        # - vmagent-office
+        labels:
+          host_type: vmagent
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^.]*).*'
+        replacement: '${1}'
+
+  - job_name: 'devops-services'
+    static_configs:
+      - targets:
+        - jenkins.ru:port
+
+        labels:
+          cluster: StarWars
+          host_type: devops-service
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^.]*).*'
+        replacement: '${1}'
+
+  - job_name: 'blackbox-http-devops-services'
+    scrape_interval: 5m
+    metrics_path: /probe
+    params:
+      module: [http_2xx-general] 
+    static_configs:
+      - targets:
+        - https://site
+
+        labels:
+          cluster: StarWars
+          host_type: devops-service
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+      - source_labels: [instance]
+        target_label: site
+      - source_labels: [instance]
+        target_label: instance
+        regex: '.*\/\/([^.]*).*'
+        replacement: '${1}'
+  
+  - job_name: 'blackbox-http-devops-basic_auth'
+    scrape_interval: 5m
+    metrics_path: /probe
+    params:
+      module: [http_2xx-basic_auth] 
+    static_configs:
+      - targets:
+        - http://site
+
+        labels:
+          cluster: StarWars
+          host_type: devops-service
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+      - source_labels: [instance]
+        target_label: site
+      - source_labels: [instance]
+        target_label: instance
+        regex: '.*\/\/([^.]*).*'
+        replacement: '${1}'
+      
+  - job_name: 'workplace_stats'
+    static_configs:
+      - targets:
+        - host1:port
+        - host2:port
+        labels:
+           host_type: workplace
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^.]*).*'
+        replacement: '${1}'
+      - source_labels: [instance]
+        target_label: instance
+        regex: 'pc03'
+        replacement: 'baranov'
+      - source_labels: [instance]
+        target_label: group
+        regex: 'host1.*|host2.*'
+        replacement: 'devops'

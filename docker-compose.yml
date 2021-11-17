@@ -1,0 +1,206 @@
+version: '3.5'
+services:
+  grafana: # 1
+    user: "${UID}:${GID}"
+    container_name: grafana
+    image: grafana/grafana:8.2.3
+    ports:
+      - 3000:3000
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - /mnt/grafana/etc/grafana/:/etc/grafana
+    networks:
+      - vm_net
+    restart: always
+    environment:
+      - VIRTUAL_HOST=grafana.xxx.ru
+      - GF_SERVER_ROOT_URL=http://grafana.xxx.ru
+      - GF_INSTALL_PLUGINS=vonage-status-panel,flant-statusmap-panel,camptocamp-prometheus-alertmanager-datasource
+  nginx: # 2
+    container_name: nginx-proxy
+    image: jwilder/nginx-proxy:0.9.3
+    ports:
+      - 80:80
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+#     - ./nginx/graylog.conf:/etc/nginx/conf.d/graylog.conf
+    networks:
+      - vm_net
+    restart: always
+  victoriametrics: # 3
+    container_name: victoriametrics
+    image: victoriametrics/victoria-metrics:v1.68.0
+    ports:
+      - 8428:8428
+    volumes:
+      - victoriametrics-storage:/victoriametrics-data
+      - /mnt/victoriametrics/etc/prometheus:/etc/prometheus
+    command:
+      - '--storageDataPath=/victoriametrics-data'
+      - '--httpListenAddr=:8428'
+      - '--retentionPeriod=24'
+      - '--promscrape.config=/etc/prometheus/prometheus.yml'
+    networks:
+      - vm_net
+    restart: always
+  vmalert: # 4
+    container_name: vmalert
+    image: victoriametrics/vmalert:v1.68.0
+    depends_on:
+      - "victoriametrics"
+      - "alertmanager"
+    ports:
+      - 8880:8880
+    volumes:
+      - /mnt/victoriametrics/etc/alerts:/etc/alerts
+    command:
+      - '--datasource.url=http://victoriametrics:8428/'
+      - '--remoteRead.url=http://victoriametrics:8428/'
+      - '--remoteWrite.url=http://victoriametrics:8428/'
+      - '--notifier.url=http://alertmanager:9093/'
+      - '--rule=/etc/alerts/*.yml'
+      - '--external.url=http://grafana.xxx.ru'
+      - '--external.alert.source=explore?orgId=1&left=["now-1h","now","VictoriaMetrics",{"expr":"{{$$expr|quotesEscape|crlfEscape|queryEscape}}"},{"mode":"Metrics"},{"ui":[true,true,true,"none"]}]' ## when c$
+    networks:
+      - vm_net
+    restart: always
+    environment:
+      - VIRTUAL_HOST=vmalert.xxx.ru
+  alertmanager: # 5
+    container_name: alertmanager
+    image:  prom/alertmanager:v0.21.0
+    volumes:
+      - /mnt/victoriametrics/etc/alertmanager:/config/:ro
+    command:
+      - '--config.file=/config/alertmanager.yml'
+      - '--cluster.listen-address=127.0.0.1:9999'
+    ports:
+      - 9093:9093
+    networks:
+      - vm_net
+    restart: always
+    environment:
+      - VIRTUAL_HOST=alertmanager.xxx.ru
+  blackbox-exporter: # 6
+    container_name: blackbox-exporter
+    image: prom/blackbox-exporter:v0.19.0
+    ports:
+      - 9115:9115
+    volumes:
+      - /mnt/victoriametrics/etc/blackbox-exporter/:/config/:ro
+    command:
+      - '--config.file=/config/blackbox.yml'
+    networks:
+      - vm_net
+    restart: always
+    logging:
+        driver: "json-file"
+        options:
+          max-size: "5m"
+  cadvisor: # 7
+    container_name: cadvisor
+    image: gcr.io/cadvisor/cadvisor:v0.37.5
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /mnt/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - 8080:8080
+    networks:
+      - vm_net
+    restart: always
+  mongodb: # 8
+    container_name: mongodb
+    image: mongo:4.2
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - vm_net
+    restart: always
+  elasticsearch: # 9
+    container_name: elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:7.10.2
+    volumes:
+      - es_data:/usr/share/elasticsearch/data:rw # chown -R administrator:root /mnt/docker/volumes/root_es_data/_data
+    environment:
+      - http.host=0.0.0.0
+      - transport.host=localhost
+      - network.host=0.0.0.0
+      - "ES_JAVA_OPTS=-Xms1024m -Xmx1024m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    mem_limit: 1g
+    networks:
+      - vm_net
+    restart: always
+  graylog: # 10
+    user: "${UID}:${GID}"
+    container_name: graylog
+    image: graylog/graylog:4.2
+    volumes:
+      - graylog_data:/usr/share/graylog/data:rw
+    environment:
+      # CHANGE ME (must be at least 16 characters)!
+      - GRAYLOG_PASSWORD_SECRET=Password-16 characters
+      # Password: Look in bitwarden
+      - GRAYLOG_ROOT_PASSWORD_SHA2=                              # echo -n "Enter Password: " && head -1 </dev/stdin | tr -d '\n' | sha256sum | cut -d" " -f1
+      - GRAYLOG_HTTP_EXTERNAL_URI=http://graylog.xxx.ru:9000/
+      - VIRTUAL_HOST=graylog.xxx.ru
+      - VIRTUAL_PORT=9000
+    entrypoint: /usr/bin/tini -- wait-for-it elasticsearch:9200 --  /docker-entrypoint.sh
+    links:
+      - mongodb:mongo
+      - elasticsearch
+    networks:
+      - vm_net
+    restart: always
+    depends_on:
+      - mongodb
+      - elasticsearch
+    ports:
+      # Graylog web interface and REST API
+      - 9000:9000
+      # Syslog TCP
+      - 1514:1514
+      # Syslog UDP
+      - 1514:1514/udp
+      # GELF TCP
+      - 12201:12201
+      # GELF UDP
+      - 12201:12201/udp
+      # Порт для FileBeats
+      - 5044:5044
+
+volumes:
+  grafana-storage:
+    driver: local
+    driver_opts:
+      type: "ext4"
+      device: "/dev/vdg"
+  victoriametrics-storage:
+    driver: local
+    driver_opts:
+      type: "ext4"
+      device: "/dev/vdb"
+  mongo_data:
+    driver: local
+    driver_opts:
+      type: "ext4"
+      device: "/dev/vdd"
+  es_data:
+    driver: local
+    driver_opts:
+      type: "ext4"
+      device: "/dev/vde"
+  graylog_data:
+    driver: local
+    driver_opts:
+      type: "ext4"
+      device: "/dev/vdf"
+networks:
+  vm_net:

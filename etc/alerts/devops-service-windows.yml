@@ -1,0 +1,102 @@
+groups:
+- name: devops-service windows collector
+  rules:
+  - alert: WindowsCollectorError    
+    expr: windows_exporter_collector_successful{host_type="devops-service"} == 0
+    labels:
+      severity: critical
+    annotations:
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - windows_exporter collector error"
+      description: "{{ $labels.instance }}: collector {{ $labels.collector }} was not successful"
+- name: devops-service ServiceStatus
+  rules:
+  - alert: WindowsServiceStatus
+    expr: windows_service_status{host_type="devops-service",status="ok"} != 1
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - service {{ $labels.name }} isn't ok"
+      description: "Service {{ $labels.name }} is not ok"
+- name: devops-service windows cpu usage
+  rules:
+  - alert: WindowsServerCpuUsage
+    expr: 100 - (avg by (instance,cluster) (rate(windows_cpu_time_total{host_type="devops-service",mode="idle"}[2m])) * 100) > 80
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU load is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - high CPU load (> 80%)"
+  - alert: WindowsServerCpuUsage
+    expr: 100 - (avg by (instance,cluster) (rate(windows_cpu_time_total{host_type="devops-service",mode="idle"}[2m])) * 100) > 90
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU load is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - extra high CPU load (> 90%)"
+- name: devops-service windows memory usage
+  rules:
+  - alert: WindowsServerMemoryUsage
+    expr: windows_os_physical_memory_free_bytes{host_type="devops-service"} / windows_cs_physical_memory_bytes * 100 < 20
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "Available memory is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} is out of available memory (< 20%)"
+  - alert: WindowsServerMemoryUsage
+    expr: windows_os_physical_memory_free_bytes{host_type="devops-service"} / windows_cs_physical_memory_bytes * 100 < 10
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "Available memory is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} is out of memory (< 10%)"
+- name: devops-service windows disk usage
+  rules:
+  - alert: WindowsServerDiskSpaceUsage
+    expr: (windows_logical_disk_size_bytes{host_type="devops-service",volume=~".*:"} - windows_logical_disk_free_bytes) / windows_logical_disk_size_bytes * 100 > 90
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "Volume is almost full: {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - volume {{ $labels.volume }} is out of disk space"
+- name: devops-service windows network
+  rules:
+  - alert: Discards
+    expr: (rate(windows_net_packets_received_discarded_total{nic!~"isatap.+|.*ISATAP.*",host_type="devops-service"}[5m]) + rate(windows_net_packets_outbound_discarded_total[5m])) / (rate(windows_net_packets_sent_total[5m]) + rate(windows_net_packets_received_total[5m])) * 100 >= 5
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Packet discard is {{ $value | humanize }}% for last 5 minutes"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.nic }} packet discards > 5%"
+  - alert: Errors
+    expr: (rate(windows_net_packets_outbound_errors_total{nic!~"isatap.+|.*ISATAP.*",host_type="devops-service"}[5m]) + rate(windows_net_packets_received_errors_total[5m])) / (rate(windows_net_packets_sent_total[5m]) + rate(windows_net_packets_received_total[5m])) * 100 >= 1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Packet errors is {{ $value | humanize }}% for last 5 minutes"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.nic }} packet errors > 1%"
+- name: devops-service windows mssql
+  rules:
+  - alert: MSSQLDBNotOnline
+    expr: mssql_db_state{host_type="devops-service"} != 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      description: "DB {{ $labels.database }} is not online for more than 1m"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - MSSQL DB {{ $labels.database }} is not online"
+  - alert: MSSQLScript
+    expr: mssql_script_success{host_type="devops-service"} != 1
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      description: "Script is not successful for more than 1m"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - MSSQL script is not successful"

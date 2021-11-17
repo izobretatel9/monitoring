@@ -1,0 +1,213 @@
+groups:
+- name: devops-service exporter
+  rules:
+  - alert: ExporterDown
+    expr: up{host_type="devops-service"} == 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "Exporter is down for more than 2m. Check statuses of network, node, all exporters and servieces"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - exporter or host is down"
+- name: devops-service cpu load
+  rules:
+  - alert: HighCPULoad
+    expr: avg by (instance,cluster) (1 - sum by (cluster, instance, cpu) (rate(node_cpu_seconds_total{host_type="devops-service",mode="idle"}[5m]))) * 100 > 80
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU load is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - high CPU load (> 80%)"
+  - alert: HighCPULoad
+    expr: avg by (instance,cluster) (1 - sum by (cluster, instance, cpu) (rate(node_cpu_seconds_total{host_type="devops-service",mode="idle"}[5m]))) * 100 > 90
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU load is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - extra high CPU load  (> 90%)"
+  - alert: HostCpuStealNoisyNeighbor
+    expr: avg by(instance,cluster) (rate(node_cpu_seconds_total{host_type="devops-service",mode="steal"}[5m])) * 100 > 10
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU steal is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - CPU steal is too high (> 10%)"
+  - alert: HostCpuIOwait
+    expr: avg by(instance,cluster) (rate(node_cpu_seconds_total{host_type="devops-service",mode="iowait"}[5m])) * 100 > 20
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU iowait is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - CPU iowait is too high (> 20%)"
+- name: devops-service memory
+  rules:
+  - alert: LackOfMemory
+    expr: 100 - (node_memory_MemTotal_bytes{host_type="devops-service"} - node_memory_MemFree_bytes - node_memory_Cached_bytes - node_memory_Buffers_bytes) / node_memory_MemTotal_bytes * 100 < 20
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Available memory is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} is out of available memory (< 20%)"
+  - alert: LackOfMemoryPfsense
+    expr: 100 - (node_memory_size_bytes{host_type="devops-service"} - node_memory_free_bytes - node_memory_buffer_bytes - node_memory_cache_bytes) / node_memory_size_bytes * 100 < 20
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Available memory is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} is out of available memory (< 20%)"
+  - alert: LackOfMemory
+    expr: 100 - (node_memory_MemTotal_bytes{host_type="devops-service"} - node_memory_MemFree_bytes - node_memory_Cached_bytes - node_memory_Buffers_bytes) / node_memory_MemTotal_bytes * 100 < 10
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "Available memory is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} is out of memory (< 10%)"
+  - alert: LackOfMemoryPfsense
+    expr: 100 - (node_memory_size_bytes{host_type="devops-service"} - node_memory_free_bytes - node_memory_buffer_bytes - node_memory_cache_bytes) / node_memory_size_bytes * 100 < 10
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "Available memory is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} is out of memory (< 10%)"
+  - alert: HostMemoryUnderMemoryPressure
+    expr: rate(node_vmstat_pgmajfault{host_type="devops-service"}[1m]) > 250
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "The node is under heavy memory pressure. Rate of major page faults is {{ $value }}"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - high rate of major page faults (> 250)"
+  - alert: OOMKill
+    expr: increase(node_vmstat_oom_kill{host_type="devops-service"}[30m]) > 0
+    labels:
+      severity: critical
+    annotations:
+      description: "OOM kill detected"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - OOM kill detected"
+- name: devops-service filesystem
+  rules:
+  - alert: OutOfSpace
+    expr: 100 - ((node_filesystem_avail_bytes{host_type="devops-service",fstype=~"ext.*|ufs",device=~".*sd.*|.*nvme.*|.*vd.*|.*ufsid.*",mountpoint!~"/run/.*|.*overlay.*"} * 100) / node_filesystem_size_bytes) > 90
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "Mountpoint is almost full: {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - mountpoint {{ $labels.mountpoint }} is out of disk space"
+  - alert: FSRO
+    expr: increase(node_filesystem_readonly{host_type="devops-service",device=~".*sd.*|.*nvme.*|.*vd.*|.*ufsid.*",mountpoint!~"/run/.*|.*overlay.*"}[30m]) > 0
+    labels:
+      severity: critical
+    annotations:
+      description: "Filesystem in readonly"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.mountpoint }} in RO"
+  - alert: FSError
+    expr: increase(node_filesystem_device_error{host_type="devops-service",device=~".*sd.*|.*nvme.*|.*vd.*|.*ufsid.*",mountpoint!~"/run/.*|.*overlay.*"}[30m]) > 0
+    labels:
+      severity: critical
+    annotations:
+      description: "Filesystem - device error"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.mountpoint }} device error"
+- name: devops-service network
+  rules:
+  - alert: Drops
+    expr: (rate(node_network_receive_drop_total{host_type="devops-service",device=~"eno.*|eth.*|enp.*|ens.*|ovpns.*|vtnet.*"}[5m]) + rate(node_network_transmit_drop_total[5m])) / (rate(node_network_receive_packets_total[5m]) + rate(node_network_transmit_packets_total[5m])) * 100 >= 5
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Packet drop is {{ $value | humanize }}% for last 5 minutes"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.device }} packet drops > 5%"
+  - alert: Errors
+    expr: (rate(node_network_receive_errs_total{host_type="devops-service",device=~"eno.*|eth.*|enp.*|ens.*|ovpns.*|vtnet.*"}[5m]) + rate(node_network_transmit_errs_total[5m])) / (rate(node_network_receive_packets_total[5m]) + rate(node_network_transmit_packets_total[5m])) * 100 >= 1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Packet errors is {{ $value | humanize }}% for last 5 minutes"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.device }} packet errors > 1%"
+- name: devops-service edac
+  rules:
+  - alert: HostEdacUncorrectableErrorsDetected
+    expr: increase(node_edac_uncorrectable_errors_total{host_type="devops-service"}[1m]) > 0
+    labels:
+      severity: warning
+    annotations:
+      description: "{{ $value }} uncorrectable memory errors reported by EDAC"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - EDAC Uncorrectable Errors detected"
+- name: devops-service time sync
+  rules:
+  - alert: HostClockSkew
+    expr: (node_timex_offset_seconds{host_type="devops-service"} > 0.1 and deriv(node_timex_offset_seconds{host_type="devops-service"}[5m]) >= 0) or (node_timex_offset_seconds{host_type="devops-service"} < -0.1 and deriv(node_timex_offset_seconds{host_type="devops-service"}[5m]) <= 0)
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "Clock skew detected. Clock is out of sync ({{ $value | humanize }})"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - clock skew"
+  - alert: HostClockNotSynchronising
+    expr: min_over_time(node_timex_sync_status{host_type="devops-service"}[1m]) == 0 and node_timex_maxerror_seconds{host_type="devops-service"} >= 16
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "Clock not synchronising"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - clock not synchronising"
+- name: devops-service site down
+  rules:
+  - alert: SiteDown
+    expr: probe_success{host_type="devops-service",site=~"http.*"} == 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "Site {{ $labels.site }} isn't available for more than 6m"
+      summary: "{{ $labels.cluster }}: Site {{ $labels.site }} isn't available"
+- name: devops-service port down
+  rules:
+  - alert: PortDown
+    expr: probe_success{host_type="devops-service",port!=""} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      description: "{{ $labels.instance }}:{{ $labels.port }} isn't available for more than 1 minute"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} port {{ $labels.port }} isn't available"
+- name: devops-service icmp fail
+  rules:
+  - alert: ICMPFail
+    expr: probe_success{host_type="devops-service",icmp="ipv4"} == 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "{{ $labels.instance }} isn't available by icmp ping for more than 1 minute"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} isn't available by icmp ping"
+- name: devops-service mysql down
+  rules:
+  - alert: MySQLDown
+    expr: mysql_up{host_type="devops-service"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      description: "MySQL is down for more than 1m"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - MySQL is down"
+- name: devops-service postgresql down
+  rules:
+  - alert: PostgreSQLDown
+    expr: pg_up{host_type="devops-service"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      description: "PostgreSQL is down for more than 1m"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - PostgreSQL is down"

@@ -1,0 +1,11 @@
+groups:
+- name: bbx service down
+  rules:
+  - alert: BbxServiceDown
+    expr:  node_systemd_unit_state{instance=~"bbx.*",name="bamboo-agent.service",state="active"} != 1
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "{{ $labels.instance }} - {{ $labels.name }} is not active for 2 minutes"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.name }} is not active"

@@ -1,0 +1,53 @@
+groups:
+- name: smart ssd wear
+  rules:
+  - alert: WearOut
+    expr: (smartmon_attr{name="Percentage_Used", col="raw_value"} * on (serial_number) group_left (device) smartmon_device_info or 100 - smartmon_attr{id=~"177|202|231", col="value"} * on (serial_number) group_left (device) smartmon_device_info < 101) > 49
+    labels:
+      severity: critical
+    annotations:
+      description: "Wear is {{ $value }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.device }} - wear is greater then 49%"
+- name: smart error
+  rules:
+  - alert: SmartError
+    expr: increase(smartmon_device_errors[30m]) * on (serial_number) group_left (device) smartmon_device_info > 0
+    labels:
+      severity: warning
+    annotations:
+      description: "Logged {{ $value }} error(s)"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.device }} - logged error"
+- name: smart healthy
+  rules:
+  - alert: SmartHealthy
+    expr: smartmon_device_smart_healthy * on (serial_number) group_left (device) smartmon_device_info == 0
+    labels:
+      severity: critical
+    annotations:
+      description: "Failed Self-Test"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.device }} - SMART Self-Test failed"
+- name: smart threshold
+  rules:
+  - alert: SmartThreshold
+    expr: (smartmon_attr{col="threshold"} > 0 and on (serial_number, name, id) smartmon_attr{col="value"} <= on (serial_number, name, id) smartmon_attr{col="threshold"}) * on (serial_number) group_left (device) smartmon_device_info
+    labels:
+      severity: critical
+    annotations:
+      description: "{{ $labels.id }} {{ $labels.name }} - attribue value is lower than threshold"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.device }} - attribute {{ $labels.name }} - critical value"
+- name: smart tracking
+  rules:
+  - alert: SmartSATATracking
+    expr: increase(smartmon_attr{col="raw_value",id=~"5|10|11|13|171|172|174|176|182|183|184|187|188|189|196|197|198|199|200|201|204|250"}[30m]) * on (serial_number) group_left (device) smartmon_device_info > 0
+    labels:
+      severity: warning
+    annotations:
+      description: "{{ $labels.id }} {{ $labels.name }} - value increase is {{ $value }}"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.device }} - attribute {{ $labels.name }} - value increase"
+  - alert: SmartNVMETracking
+    expr: increase(smartmon_attr{col="raw_value",name=~"Critical_Warning|Media_and_Data_Integrity_Errors"}[30m]) * on (serial_number) group_left (device) smartmon_device_info > 0
+    labels:
+      severity: warning
+    annotations:
+      description: "{{ $labels.name }} - value increase is {{ $value }}"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.device }} - attribute {{ $labels.name }} - value increase"

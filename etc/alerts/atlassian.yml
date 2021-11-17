@@ -1,0 +1,11 @@
+groups:
+- name: atlassian service down
+  rules:
+  - alert: AtlassianServiceDown
+    expr:  node_systemd_unit_state{instance=~"bamboo|bitbucket",name=~"atlbitbucket.*|bamboo.*",state="active"} != 1
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "{{ $labels.instance }} - {{ $labels.name }} is not active for 2 minutes"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.name }} is not active"

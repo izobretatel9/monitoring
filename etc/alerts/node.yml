@@ -1,0 +1,183 @@
+groups:
+- name: node exporter
+  rules:
+  - alert: ExporterDown
+    expr: label_copy(up{host_type="node"},"instance","node") == 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "Exporter is down for more than 2m. Check statuses of network, node, all exporters and servieces"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - exporter or host is down"
+- name: node cpu load
+  rules:
+  - alert: HighCPULoad
+    expr: avg by (instance,cluster) (1 - sum by (instance, cpu) (rate(node_cpu_seconds_total{instance="it-service",mode="idle"}[5m]))) * 100 > 80
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU load is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - high CPU load (> 80%)"
+  - alert: HighCPULoad
+    expr: avg by (instance,cluster) (1 - sum by (instance, cpu) (rate(node_cpu_seconds_total{instance="it-service",mode="idle"}[5m]))) * 100 > 90
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "CPU load is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - extra high CPU load  (> 90%)"
+  - alert: HostCpuStealNoisyNeighbor
+    expr: avg by(instance,cluster) (rate(node_cpu_seconds_total{host_type="node",mode="steal"}[5m])) * 100 > 10
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU steal is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - CPU steal is too high (> 10%)"
+  - alert: HostCpuIOwait
+    expr: avg by(instance,cluster) (rate(node_cpu_seconds_total{host_type="node",mode="iowait"}[5m])) * 100 > 10
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU iowait is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - CPU iowait is too high (> 10%)"
+- name: node memory
+  rules:
+  - alert: LackOfMemory
+    expr: 100 - (node_memory_MemTotal_bytes{host_type="node"} - node_memory_MemFree_bytes - node_memory_Cached_bytes - node_memory_Buffers_bytes) / node_memory_MemTotal_bytes * 100 < 20
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Available memory is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} is out of available memory (< 20%)"
+  - alert: LackOfMemory
+    expr: 100 - (node_memory_MemTotal_bytes{host_type="node"} - node_memory_MemFree_bytes - node_memory_Cached_bytes - node_memory_Buffers_bytes) / node_memory_MemTotal_bytes * 100 < 10
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "Available memory is {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} is out of memory (< 10%)"
+  - alert: HostMemoryUnderMemoryPressure
+    expr: rate(node_vmstat_pgmajfault{host_type="node"}[1m]) > 250
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "The node is under heavy memory pressure. Rate of major page faults is {{ $value }}"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - high rate of major page faults (> 250)"
+  - alert: OOMKill
+    expr: increase(node_vmstat_oom_kill{host_type="node"}[30m]) > 0
+    labels:
+      severity: critical
+    annotations:
+      description: "OOM kill detected"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - OOM kill detected"
+- name: node filesystem
+  rules:
+  - alert: OutOfRootSpace
+    expr: 100 - ((node_filesystem_avail_bytes{host_type="node",mountpoint="/"} * 100) / node_filesystem_size_bytes) > 90
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "Root is almost full: {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - root is out of disk space"
+  - alert: OutOfRootSpace
+    expr: 100 - ((node_filesystem_avail_bytes{host_type="node",mountpoint="/"} * 100) / node_filesystem_size_bytes) > 80
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "Root is close to full: {{ $value | humanize }}%"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - root is close to full"
+  - alert: FSRO
+    expr: increase(node_filesystem_readonly{host_type="node",device=~".*sd.*|.*nvme.*",mountpoint!~"/run/.*"}[30m]) > 0
+    labels:
+      severity: critical
+    annotations:
+      description: "Filesystem in readonly"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.mountpoint }} in RO"
+  - alert: FSError
+    expr: increase(node_filesystem_device_error{host_type="node",device=~".*sd.*|.*nvme.*",mountpoint!~"/run/.*"}[30m]) > 0
+    labels:
+      severity: critical
+    annotations:
+      description: "Filesystem - device error"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.mountpoint }} device error"
+- name: node temperature
+  rules:
+  - alert: CPUHot
+    expr: avg by (instance, chip, cluster) (node_hwmon_temp_celsius{host_type="node",chip=~"platform_coretemp_.*"}) > 70
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU temperature is {{ $value | humanize }}"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - CPU is too hot"
+  - alert: CPUHot
+    expr: avg by (instance, chip, cluster) (node_hwmon_temp_celsius{host_type="node",chip=~"platform_coretemp_.*"}) > 80
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "CPU temperature is {{ $value | humanize }}"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - CPU is extremly hot"
+- name: node network
+  rules:
+  - alert: Drops
+    expr: (rate(node_network_receive_drop_total{host_type="node",device=~"eno.*|eth.*|enp.*"}[5m]) + rate(node_network_transmit_drop_total[5m])) / (rate(node_network_receive_packets_total[5m]) + rate(node_network_transmit_packets_total[5m])) * 100 >= 1.5
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Packet drop is {{ $value | humanize }}% for last 5 minutes"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.device }} packet drops > 1.5%"
+  - alert: Errors
+    expr: (rate(node_network_receive_errs_total{host_type="node",device=~"eno.*|eth.*|enp.*"}[5m]) + rate(node_network_transmit_errs_total[5m])) / (rate(node_network_receive_packets_total[5m]) + rate(node_network_transmit_packets_total[5m])) * 100 >= 1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Packet errors is {{ $value | humanize }}% for last 5 minutes"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.device }} packet errors > 1%"
+- name: node edac
+  rules:
+  - alert: HostEdacUncorrectableErrorsDetected
+    expr: increase(node_edac_uncorrectable_errors_total{host_type="node"}[1m]) > 0
+    labels:
+      severity: warning
+    annotations:
+      description: "{{ $value }} uncorrectable memory errors reported by EDAC"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - EDAC Uncorrectable Errors detected"
+- name: node time sync
+  rules:
+  - alert: HostClockSkew
+    expr: (node_timex_offset_seconds{host_type="node"} > 0.05 and deriv(node_timex_offset_seconds{host_type="node"}[5m]) >= 0) or (node_timex_offset_seconds{host_type="node"} < -0.05 and deriv(node_timex_offset_seconds{host_type="node"}[5m]) <= 0)
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "Clock skew detected. Clock is out of sync ({{ $value | humanize }})"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - clock skew"
+  - alert: HostClockNotSynchronising
+    expr: min_over_time(node_timex_sync_status{host_type="node"}[1m]) == 0 and node_timex_maxerror_seconds{host_type="node"} >= 16
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      description: "Clock not synchronising"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - clock not synchronising"
+- name: node pve services
+  rules:
+  - alert: PVEServiceDown
+    expr: node_systemd_unit_state{host_type="node",name=~"pve.*|corosync.*",state="active",type!="oneshot"} == 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      description: "PVE service is not active for 2 minutes"
+      summary: "{{ $labels.cluster }}: {{ $labels.instance }} - {{ $labels.name }} is not active"

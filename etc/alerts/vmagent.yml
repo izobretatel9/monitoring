@@ -1,0 +1,11 @@
+groups:
+- name: vmagent metrics
+  rules:
+  - alert: vmagentDown
+    expr: up{host_type="vmagent"} == 0
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      description: "vmagent is down for more than 5m, please check it could be a either exporter crash or a network crash"
+      summary: "{{ $labels.instance }} exporter is not available"
