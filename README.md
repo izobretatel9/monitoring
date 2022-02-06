@@ -1,5 +1,7 @@
 # Описание скрипта
 
+### Презентация по мониторингу [Monitoring.pptx](https://github.com/izobretatel9/monitoring/blob/main/Monitoring.pptx "click")
+#
 Скрипт позволяет устанавить такие сервисы:
 ```
 1. grafana
@@ -18,26 +20,31 @@
 volumes:
   grafana-storage:
     driver: local
+    name: grafanastorage
     driver_opts:
       type: "ext4"
       device: "/dev/vdg"
   victoriametrics-storage:
     driver: local
+    name: victoriametricsstorage
     driver_opts:
       type: "ext4"
       device: "/dev/vdb"
   mongo_data:
     driver: local
+    name: mongostorage
     driver_opts:
       type: "ext4"
       device: "/dev/vdd"
   es_data:
     driver: local
+    name: esstorage
     driver_opts:
       type: "ext4"
       device: "/dev/vde"
   graylog_data:
     driver: local
+    name: graylogstorage
     driver_opts:
       type: "ext4"
       device: "/dev/vdf"
