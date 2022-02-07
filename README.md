@@ -1,6 +1,6 @@
 # Описание скрипта
 
-### Презентация по мониторингу [Monitoring.pptx](https://github.com/izobretatel9/monitoring/blob/main/Monitoring.pptx "click")
+### Презентация по мониторингу [Monitoring.pptx](https://github.com/izobretatel9/monitoring/raw/main/Monitoring.pptx "Download")
 #
 Скрипт позволяет устанавить такие сервисы:
 ```
